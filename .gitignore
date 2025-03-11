@@ -1,0 +1,37 @@
+# 忽略 Python 虛擬環境
+.venv/
+
+# 忽略 Python cache 檔案
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 忽略 VSCode 設定
+.vscode/
+
+# 忽略 Cursor IDE 設定
+.cursor/
+
+# 忽略 Git 目錄
+.git/
+
+# 忽略鎖定檔案
+uv.lock
+
+# 忽略 Python 版本設定
+.python-version
+
+# 忽略可能的敏感設定檔
+claude_desktop_config.json
+
+# 忽略資料目錄中的所有內容
+data/
+data
+
+# 忽略 Python SDK 目錄中的所有內容
+python-sdk/
+
+# 忽略其他可能的臨時檔案
+*.log
+*.tmp
+*.bak
