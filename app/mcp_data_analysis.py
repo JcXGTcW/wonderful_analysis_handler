@@ -3,12 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
-import base64
-import json
 import traceback
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from mcp.server.fastmcp import FastMCP, Image, Context
+from mcp.server.fastmcp import FastMCP, Image
 
 # 設定日誌
 import logging
@@ -22,29 +21,124 @@ logger = logging.getLogger("data_analysis_mcp")
 # 創建 FastMCP 伺服器
 mcp = FastMCP("資料分析工具")
 
+def load_csv_to_dataframe(
+    csv_data: Optional[str] = None,
+    csv_path: Optional[str] = None,
+    header: Optional[int] = 'infer'
+) -> pd.DataFrame:
+    """
+    從 CSV 字串或路徑載入資料為 DataFrame。
+    
+    Args:
+        csv_data: CSV 格式的資料
+        csv_path: CSV 檔案的路徑
+        header: 指定標題行，若無標題則設為 None
+    
+    Returns:
+        pandas DataFrame
+    """
+    if csv_data and csv_path:
+        raise ValueError("不能同時提供 csv_data 和 csv_path，請選擇一種方式。")
+    if csv_path:
+        df = pd.read_csv(csv_path, encoding='utf-8', header=header)
+        logger.info(f"成功從路徑載入 CSV 資料，行數: {len(df)}，列數: {len(df.columns)}")
+    elif csv_data:
+        df = pd.read_csv(io.StringIO(csv_data), header=header)
+        logger.info(f"成功載入 CSV 資料，行數: {len(df)}，列數: {len(df.columns)}")
+    else:
+        raise ValueError("必須提供 csv_data 或 csv_path")
+    return df
+
 @mcp.tool()
-async def analyze_data(csv_data: str, operations: List[Dict[str, Any]] = None, output_format: str = "json") -> Dict[str, Any]:
+async def analyze_data(
+    csv_data: Optional[str] = None,
+    csv_path: Optional[str] = None,
+    operations: List[Dict[str, Any]] = None,
+    output_format: str = "json",
+    header: Optional[int] = 'infer'
+) -> Dict[str, Any]:
     """
     分析 CSV 資料，支援過濾、分組、聚合等操作
     
     Args:
         csv_data: CSV 格式的資料
+        csv_path: CSV 檔案的路徑
         operations: 要執行的操作列表，每個操作是一個字典，包含 type 和 params
         output_format: 輸出格式，json 或 csv
+        header: 指定標題行，若無標題則設為 None
     
     Returns:
         分析結果
+        
+    支援的操作類型：
+        1. filter: 過濾資料
+           參數：
+           - query: 過濾條件，使用 pandas query 語法
+           
+        2. group_by: 分組和聚合
+           參數：
+           - columns: 分組列名列表
+           - aggregations: 聚合函數字典，格式為 {列名: 聚合函數}
+           
+        3. sort: 排序資料
+           參數：
+           - columns: 排序列名列表
+           - ascending: 是否升序排序，預設為 True
+           
+        4. select: 選擇列
+           參數：
+           - columns: 要選擇的列名列表
+           
+        5. transform: 轉換列
+           參數：
+           - transforms: 轉換表達式字典，格式為 {列名: 表達式}
+           
+        6. time_series: 時間序列處理
+           參數：
+           - date_column: 日期列名
+           - frequency: 重採樣頻率，預設為 'D'（每日）
+           
+        7. pivot: 樞紐表
+           參數：
+           - index: 索引列名
+           - columns: 列標籤列名
+           - values: 值列名
+           
+        8. shape: 返回資料的行數和列數
+           無參數
+           
+        9. head: 返回資料集的前幾行
+           參數：
+           - n: 返回的行數，預設為 5
+           
+        10. tail: 返回資料集的後幾行
+            參數：
+            - n: 返回的行數，預設為 5
+            
+        11. custom: 執行自定義查詢
+            參數：
+            - query: 自定義查詢，使用 pandas DataFrame 方法
+            
+    使用範例：
+        {
+            "csv_path": "data.csv",
+            "operations": [
+                {"type": "filter", "params": {"query": "age > 30"}},
+                {"type": "group_by", "params": {"columns": ["gender"], "aggregations": {"age": "mean"}}}
+            ],
+            "output_format": "json"
+        }
     """
     try:
         logger.info(f"執行資料分析，操作數量: {len(operations) if operations else 0}")
         
-        # 將 CSV 字串轉換為 DataFrame
-        df = pd.read_csv(io.StringIO(csv_data))
-        logger.info(f"成功載入 CSV 資料，行數: {len(df)}，列數: {len(df.columns)}")
+        # 使用新函數載入資料
+        df = load_csv_to_dataframe(csv_data, csv_path, header=header)
         
         # 如果沒有指定操作，則返回基本統計資訊
         if not operations:
-            operations = [{"type": "summary"}]
+            # 不需要指定操作，直接生成基本統計資訊
+            operations = []
         
         # 執行請求的操作序列
         for i, operation in enumerate(operations):
@@ -107,80 +201,145 @@ async def analyze_data(csv_data: str, operations: List[Dict[str, Any]] = None, o
                     df = df.reset_index()
                     logger.info(f"樞紐表後，形狀: {df.shape}")
             
-            elif op_type == "summary":
-                # 不需要做任何事，只是為了生成基本統計資訊
-                pass
+            elif op_type == "shape":
+                # 返回資料的行數和列數
+                result = {"rows": len(df), "columns": len(df.columns)}
+                logger.info(f"資料形狀: 行數: {len(df)}, 列數: {len(df.columns)}")
+                return result
             
-            elif op_type == "correlation":
-                # 不需要做任何事，只是為了生成相關性矩陣
-                pass
+            elif op_type == "head":
+                # 返回資料集的前幾行
+                n = params.get("n", 5)  # 預設返回前 5 行
+                result = df.head(n)
+                if output_format == "json":
+                    # 處理日期時間列以進行 JSON 序列化
+                    for col in result.columns:
+                        if pd.api.types.is_datetime64_any_dtype(result[col]):
+                            result[col] = result[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    head_result = {
+                        "data": result.to_dict(orient="records"),
+                        "rows": len(result),
+                        "columns": list(result.columns)
+                    }
+                    logger.info(f"返回資料集前 {n} 行，行數: {len(result)}")
+                    # 使用 json.dumps 並設定 ensure_ascii=False
+                    return json.loads(json.dumps(head_result, ensure_ascii=False))
+                elif output_format == "csv":
+                    csv_data = result.to_csv(index=False)
+                    logger.info(f"返回資料集前 {n} 行 CSV，大小: {len(csv_data)} 位元組")
+                    return {"csv_data": csv_data}
             
-            elif op_type == "missing":
-                # 不需要做任何事，只是為了生成缺失值分析
-                pass
-            
-            elif op_type == "unique":
-                # 不需要做任何事，只是為了生成唯一值分析
-                pass
+            elif op_type == "tail":
+                # 返回資料集的後幾行
+                n = params.get("n", 5)  # 預設返回後 5 行
+                result = df.tail(n)
+                if output_format == "json":
+                    # 處理日期時間列以進行 JSON 序列化
+                    for col in result.columns:
+                        if pd.api.types.is_datetime64_any_dtype(result[col]):
+                            result[col] = result[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    tail_result = {
+                        "data": result.to_dict(orient="records"),
+                        "rows": len(result),
+                        "columns": list(result.columns)
+                    }
+                    logger.info(f"返回資料集後 {n} 行，行數: {len(result)}")
+                    # 使用 json.dumps 並設定 ensure_ascii=False
+                    return json.loads(json.dumps(tail_result, ensure_ascii=False))
+                elif output_format == "csv":
+                    csv_data = result.to_csv(index=False)
+                    logger.info(f"返回資料集後 {n} 行 CSV，大小: {len(csv_data)} 位元組")
+                    return {"csv_data": csv_data}
             
             elif op_type == "custom":
                 # 執行自定義查詢
                 query = params.get("query")
                 if query:
                     try:
-                        result = eval(f"df.{query}")
+                        # 限制可用的方法，只允許使用 pandas DataFrame 的方法
+                        # 移除已經在其他操作類型中實現的方法
+                        allowed_methods = {
+                            'describe', 'info', 'mean', 'median', 'min', 'max',
+                            'sum', 'count', 'nunique', 'value_counts', 'drop', 'dropna', 'fillna',
+                            'reset_index', 'set_index',
+                            'agg', 'aggregate', 'apply', 'applymap', 'pipe',
+                            'drop_duplicates', 'duplicated',
+                            'rank', 'round', 'clip', 'astype', 'copy', 'isnull',
+                            'notnull', 'between', 'isna', 'notna', 'any', 'all', 'abs', 'corr',
+                            'cov', 'diff', 'pct_change', 'shift', 'isin', 'where', 'mask'
+                        }
+                        
+                        # 解析查詢，確保只使用允許的方法
+                        method_name = query.split('(')[0].strip()
+                        if method_name not in allowed_methods:
+                            raise ValueError(f"不允許使用方法: {method_name}")
+                        
+                        # 使用 getattr 執行查詢，而不是 eval
+                        method = getattr(df, method_name)
+                        # 移除方法名稱，只保留參數部分
+                        params_str = query[len(method_name):].strip()
+                        if params_str.startswith('(') and params_str.endswith(')'):
+                            params_str = params_str[1:-1]
+                        
+                        # 如果有參數，則執行帶參數的方法
+                        if params_str:
+                            # 使用 eval 來評估參數，但限制在安全的範圍內
+                            # 這仍然有風險，但比直接 eval 整個查詢要安全得多
+                            params_dict = {}
+                            exec(f"params_dict = dict({params_str})", {"__builtins__": {}}, params_dict)
+                            result = method(**params_dict)
+                        else:
+                            result = method()
+                        
+                        # 檢查結果類型，並相應地處理
                         if isinstance(result, pd.DataFrame):
+                            # 對於 DataFrame 結果，更新 df 以便後續處理
                             df = result
-                        logger.info(f"執行自定義查詢後，形狀: {df.shape}")
+                            logger.info(f"執行自定義查詢後，形狀: {df.shape}")
+                        elif isinstance(result, pd.Series):
+                            # 如果結果是 Series，轉換為 DataFrame
+                            result_df = result.to_frame()
+                            if output_format == "json":
+                                custom_result = {
+                                    "data": result_df.to_dict(orient="records"),
+                                    "rows": len(result_df),
+                                    "columns": list(result_df.columns)
+                                }
+                                logger.info(f"返回自定義查詢結果 (Series)，行數: {len(result_df)}")
+                                # 使用 json.dumps 並設定 ensure_ascii=False
+                                return json.loads(json.dumps(custom_result, ensure_ascii=False))
+                            elif output_format == "csv":
+                                csv_data = result_df.to_csv(index=False)
+                                logger.info(f"返回自定義查詢 CSV 結果 (Series)，大小: {len(csv_data)} 位元組")
+                                return {"csv_data": csv_data}
+                        else:
+                            # 如果結果是標量或其他類型，直接返回
+                            logger.info(f"執行自定義查詢，結果類型: {type(result).__name__}")
+                            return {"result": result}
                     except Exception as e:
                         logger.error(f"自定義查詢錯誤: {str(e)}")
-        
-        # 生成基本統計資訊
-        stats = {}
-        for col in df.select_dtypes(include=[np.number]).columns:
-            stats[col] = {
-                "min": float(df[col].min()) if not pd.isna(df[col].min()) else None,
-                "max": float(df[col].max()) if not pd.isna(df[col].max()) else None,
-                "mean": float(df[col].mean()) if not pd.isna(df[col].mean()) else None,
-                "median": float(df[col].median()) if not pd.isna(df[col].median()) else None,
-                "std": float(df[col].std()) if not pd.isna(df[col].std()) else None
-            }
-        
-        # 生成缺失值分析
-        missing = {}
-        for col in df.columns:
-            missing_count = df[col].isna().sum()
-            missing[col] = {
-                "count": int(missing_count),
-                "percentage": float(missing_count / len(df) * 100) if len(df) > 0 else 0
-            }
-        
-        # 生成唯一值分析
-        unique = {}
-        for col in df.columns:
-            unique_count = df[col].nunique()
-            unique[col] = {
-                "count": int(unique_count),
-                "percentage": float(unique_count / len(df) * 100) if len(df) > 0 else 0
-            }
+                        return {"error": f"自定義查詢錯誤: {str(e)}"}
         
         # 根據請求的輸出格式返回結果
         if output_format == "json":
+            # 修改這裡：直接返回資料集的內容，而不是統計資訊
             # 處理日期時間列以進行 JSON 序列化
-            for col in df.columns:
-                if pd.api.types.is_datetime64_any_dtype(df[col]):
-                    df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            df_copy = df.copy()
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                    df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d %H:%M:%S')
             
+            # 直接返回資料集的內容
             result = {
-                "data": df.to_dict(orient="records"),
-                "stats": stats,
-                "missing": missing,
-                "unique": unique,
-                "rows": len(df),
-                "columns": list(df.columns)
+                "data": df_copy.to_dict(orient="records"),
+                "rows": len(df_copy),
+                "columns": list(df_copy.columns)
             }
             logger.info(f"返回 JSON 結果，行數: {len(df)}")
-            return result
+            # 使用 json.dumps 並設定 ensure_ascii=False
+            return json.loads(json.dumps(result, ensure_ascii=False))
             
         elif output_format == "csv":
             csv_data = df.to_csv(index=False)
@@ -214,6 +373,62 @@ async def visualize_data(data: List[Dict[str, Any]], chart_type: str,
     
     Returns:
         圖表圖像
+        
+    支援的圖表類型：
+        1. line: 折線圖
+           適用於：顯示連續資料的趨勢變化
+           必要參數：
+           - x_column: X 軸資料（通常是時間或連續變數）
+           - y_column: Y 軸資料（數值）
+           選用參數：
+           - color_column: 用於分組的類別變數
+           
+        2. bar: 柱狀圖
+           適用於：比較不同類別之間的數值
+           必要參數：
+           - x_column: 類別變數
+           - y_column: 數值變數
+           選用參數：
+           - color_column: 用於分組的類別變數
+           
+        3. scatter: 散點圖
+           適用於：顯示兩個變數之間的關係
+           必要參數：
+           - x_column: X 軸數值變數
+           - y_column: Y 軸數值變數
+           選用參數：
+           - color_column: 用於分組的類別變數
+           
+        4. pie: 圓餅圖
+           適用於：顯示部分與整體的關係
+           必要參數：
+           - x_column: 類別標籤
+           - y_column: 數值（佔比）
+           
+        5. box: 箱線圖
+           適用於：顯示數值分佈和離群值
+           必要參數：
+           - x_column: 類別變數
+           - y_column: 數值變數
+           選用參數：
+           - color_column: 用於分組的類別變數
+           
+        6. heatmap: 熱圖
+           適用於：顯示二維資料的強度
+           必要參數：
+           - x_column: 行索引
+           - y_column: 列索引
+           選用參數：
+           - options.value_column: 熱圖值的來源列
+           
+    使用範例：
+        {
+            "data": [{"month": "一月", "sales": 100}, {"month": "二月", "sales": 150}],
+            "chart_type": "bar",
+            "x_column": "month",
+            "y_column": "sales",
+            "title": "月度銷售報表"
+        }
     """
     try:
         logger.info(f"生成視覺化，圖表類型: {chart_type}")
@@ -310,23 +525,57 @@ async def visualize_data(data: List[Dict[str, Any]], chart_type: str,
         return Image(data=img_buf.getvalue(), format="png")
 
 @mcp.tool()
-async def advanced_statistics(csv_data: str, operations: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def advanced_statistics(
+    csv_data: str,
+    operations: List[Dict[str, Any]] = None,
+    header: Optional[int] = 'infer'
+) -> Dict[str, Any]:
     """
     執行進階統計分析
     
     Args:
         csv_data: CSV 格式的資料
         operations: 要執行的操作列表，每個操作是一個字典，包含 type 和 params
+        header: 指定標題行，若無標題則設為 None
     
     Returns:
         進階統計分析結果
+        
+    支援的分析類型：
+        1. correlation: 相關性分析
+           功能：計算數值變數之間的相關係數矩陣
+           無需額外參數
+           
+        2. time_series: 時間序列分析
+           功能：分析時間序列資料的趨勢和季節性
+           自動檢測日期列（包含 'date' 或 'time' 的列名）
+           
+        3. distribution: 分佈分析
+           功能：分析數值變數的分佈特性
+           參數：
+           - columns: 要分析的列名列表，預設分析所有數值列
+           
+        4. hypothesis_test: 假設檢定
+           功能：執行統計假設檢定
+           參數：
+           - test_type: 檢定類型，支援 't_test'、'chi2_test'
+           - group_column: 分組列名（用於比較不同組別）
+           - value_column: 數值列名（用於檢定）
+           
+    使用範例：
+        {
+            "csv_data": "...",
+            "operations": [
+                {"type": "correlation"},
+                {"type": "distribution", "params": {"columns": ["age", "income"]}}
+            ]
+        }
     """
     try:
         logger.info("執行進階統計分析")
         
-        # 將 CSV 字串轉換為 DataFrame
-        df = pd.read_csv(io.StringIO(csv_data))
-        logger.info(f"成功載入 CSV 資料，行數: {len(df)}，列數: {len(df.columns)}")
+        # 使用新函數載入資料
+        df = load_csv_to_dataframe(csv_data, header=header)
         
         # 如果沒有指定操作，則執行所有可用的分析
         if not operations:
@@ -476,6 +725,113 @@ async def health_check() -> Dict[str, Any]:
     """
     logger.info("健康檢查請求")
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@mcp.tool()
+async def get_tool_help() -> Dict[str, Any]:
+    """
+    獲取資料分析工具的使用說明
+    
+    Returns:
+        包含所有工具說明的字典
+    """
+    help_info = {
+        "工具概述": "這是一個資料分析工具集，提供資料載入、分析、視覺化和進階統計功能。",
+        "主要功能": [
+            "analyze_data: 基本資料分析，支援過濾、分組、聚合等操作",
+            "visualize_data: 資料視覺化，支援多種圖表類型",
+            "advanced_statistics: 進階統計分析，包括相關性、時間序列等"
+        ],
+        "analyze_data": {
+            "描述": "分析 CSV 資料，支援過濾、分組、聚合等操作",
+            "參數": {
+                "csv_data": "CSV 格式的資料",
+                "csv_path": "CSV 檔案的路徑",
+                "operations": "要執行的操作列表，每個操作是一個字典，包含 type 和 params",
+                "output_format": "輸出格式，json 或 csv",
+                "header": "指定標題行，若無標題則設為 None"
+            },
+            "支援的操作類型": [
+                "filter: 過濾資料",
+                "group_by: 分組和聚合",
+                "sort: 排序資料",
+                "select: 選擇列",
+                "transform: 轉換列",
+                "time_series: 時間序列處理",
+                "pivot: 樞紐表",
+                "shape: 返回資料的行數和列數",
+                "head: 返回資料集的前幾行",
+                "tail: 返回資料集的後幾行",
+                "custom: 執行自定義查詢"
+            ],
+            "使用範例": {
+                "基本分析": {
+                    "csv_path": "data.csv",
+                    "output_format": "json"
+                },
+                "過濾和分組": {
+                    "csv_path": "data.csv",
+                    "operations": [
+                        {"type": "filter", "params": {"query": "age > 30"}},
+                        {"type": "group_by", "params": {"columns": ["gender"], "aggregations": {"age": "mean"}}}
+                    ],
+                    "output_format": "json"
+                }
+            }
+        },
+        "visualize_data": {
+            "描述": "生成資料視覺化圖表",
+            "參數": {
+                "data": "要視覺化的資料",
+                "chart_type": "圖表類型，支援 line, bar, scatter, pie, box, heatmap",
+                "x_column": "X 軸列名",
+                "y_column": "Y 軸列名",
+                "title": "圖表標題",
+                "color_column": "用於顏色分組的列名",
+                "options": "其他圖表選項"
+            },
+            "支援的圖表類型": [
+                "line: 折線圖",
+                "bar: 柱狀圖",
+                "scatter: 散點圖",
+                "pie: 圓餅圖",
+                "box: 箱線圖",
+                "heatmap: 熱圖"
+            ],
+            "使用範例": {
+                "柱狀圖": {
+                    "data": [{"month": "一月", "sales": 100}, {"month": "二月", "sales": 150}],
+                    "chart_type": "bar",
+                    "x_column": "month",
+                    "y_column": "sales",
+                    "title": "月度銷售報表"
+                }
+            }
+        },
+        "advanced_statistics": {
+            "描述": "執行進階統計分析",
+            "參數": {
+                "csv_data": "CSV 格式的資料",
+                "operations": "要執行的操作列表，每個操作是一個字典，包含 type 和 params",
+                "header": "指定標題行，若無標題則設為 None"
+            },
+            "支援的分析類型": [
+                "correlation: 相關性分析",
+                "time_series: 時間序列分析",
+                "distribution: 分佈分析",
+                "hypothesis_test: 假設檢定"
+            ],
+            "使用範例": {
+                "相關性分析": {
+                    "csv_data": "...",
+                    "operations": [
+                        {"type": "correlation"}
+                    ]
+                }
+            }
+        }
+    }
+    
+    return help_info
 
 if __name__ == "__main__":
     mcp.run() 
