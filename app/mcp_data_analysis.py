@@ -74,6 +74,8 @@ async def analyze_data(
         1. filter: 過濾資料
            參數：
            - query: 過濾條件，使用 pandas query 語法
+             注意：必須使用 Python 風格的運算符，例如 & (而非 &&)、| (而非 ||)
+             例如："`欄位1` > 10 & `欄位2` == 'A'"
            
         2. group_by: 分組和聚合
            參數：
@@ -120,11 +122,32 @@ async def analyze_data(
             - query: 自定義查詢，使用 pandas DataFrame 方法
             
     使用範例：
+        # 基本過濾範例
         {
             "csv_path": "data.csv",
             "operations": [
-                {"type": "filter", "params": {"query": "age > 30"}},
-                {"type": "group_by", "params": {"columns": ["gender"], "aggregations": {"age": "mean"}}}
+                {"type": "filter", "params": {"query": "`年齡` > 30 & `性別` == '男'"}}
+            ],
+            "output_format": "json"
+        }
+        
+        # 過濾和排序範例
+        {
+            "csv_path": "data.csv",
+            "operations": [
+                {"type": "filter", "params": {"query": "`學校` == '台北市立高中' & `日期` >= '2023-01-01' & `日期` <= '2023-01-31'"}},
+                {"type": "sort", "params": {"columns": ["日期"], "ascending": true}}
+            ],
+            "output_format": "json"
+        }
+        
+        # 過濾、選擇列和分組範例
+        {
+            "csv_path": "data.csv",
+            "operations": [
+                {"type": "filter", "params": {"query": "`成績` > 60"}},
+                {"type": "select", "params": {"columns": ["學生", "科目", "成績"]}},
+                {"type": "group_by", "params": {"columns": ["科目"], "aggregations": {"成績": "mean"}}}
             ],
             "output_format": "json"
         }
@@ -771,8 +794,24 @@ async def get_tool_help() -> Dict[str, Any]:
                 "過濾和分組": {
                     "csv_path": "data.csv",
                     "operations": [
-                        {"type": "filter", "params": {"query": "age > 30"}},
-                        {"type": "group_by", "params": {"columns": ["gender"], "aggregations": {"age": "mean"}}}
+                        {"type": "filter", "params": {"query": "`年齡` > 30 & `性別` == '男'"}}
+                    ],
+                    "output_format": "json"
+                },
+                "過濾和排序": {
+                    "csv_path": "data.csv",
+                    "operations": [
+                        {"type": "filter", "params": {"query": "`學校` == '台北市立高中' & `日期` >= '2023-01-01' & `日期` <= '2023-01-31'"}},
+                        {"type": "sort", "params": {"columns": ["日期"], "ascending": True}}
+                    ],
+                    "output_format": "json"
+                },
+                "過濾、選擇列和分組": {
+                    "csv_path": "data.csv",
+                    "operations": [
+                        {"type": "filter", "params": {"query": "`成績` > 60"}},
+                        {"type": "select", "params": {"columns": ["學生", "科目", "成績"]}},
+                        {"type": "group_by", "params": {"columns": ["科目"], "aggregations": {"成績": "mean"}}}
                     ],
                     "output_format": "json"
                 }
