@@ -39,7 +39,7 @@
     cd mcp_data_tools
     ```
 
-### 2. 只下載 `mcp_data_analysis.py` 檔案（推薦給一般使用者）
+### 2. 只下載 [app/mcp_data_analysis.py](https://github.com/JcXGTcW/mcp_data_tools/blob/master/app/mcp_data_analysis.py) 檔案（推薦給一般使用者）
 
 如果您是一般使用者，只需要執行伺服器，且不關心程式碼更新，可以只下載 `mcp_data_analysis.py` 檔案。
 這種方式更簡單快速。
