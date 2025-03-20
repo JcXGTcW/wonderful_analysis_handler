@@ -56,21 +56,19 @@
 ### macOS
 
 1.  開啟終端機。
-2.  執行以下指令以下載並執行安裝腳本：
+2.  執行以下指令來安裝 `uv`：
 
     ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    brew install uv
     ```
-
-3.  **重要**：在 macOS 上，您需要使用 `uv` 的完整路徑。請執行 `which uv` 找出 `uv` 的完整路徑。
 
 ### Windows
 
 1.  開啟 PowerShell。
-2.  執行以下指令以下載並執行安裝腳本：
+2.  執行以下指令來安裝 `uv`：
 
     ```powershell
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    pip install uv
     ```
 
 3.  **重要**：在 Windows 上，請確認 `uv` 已加入到您的 `PATH` 環境變數。
@@ -87,7 +85,7 @@
         {
           "mcpServers": {
             "資料分析工具": {
-              "command": "/Users/jcxgtcw/.local/bin/uv",
+              "command": "uv",
               "args": [
                 "run",
                 "--with",
@@ -111,8 +109,6 @@
 
     *   **重要**：
         *   將 `"資料分析工具"` 替換為您想要的伺服器名稱。
-        *   **macOS**：將 `"/Users/jcxgtcw/.local/bin/uv"` 替換為您執行 `which uv` 後得到的 `uv` 完整路徑。
-        *   **Windows**：如果 `uv` 已加入到您的 `PATH` 環境變數，`command` 可以直接設定為 `"uv"`。
         *   將 `"/Users/jcxgtcw/Documents/GitHub/mcp_data_tools/app/mcp_data_analysis.py"` 替換為您的 `mcp_data_analysis.py` 檔案的完整路徑。
 3.  儲存 `claude_desktop_config.json` 檔案。
 
@@ -126,7 +122,9 @@
 
 *   **找不到 `uv` 指令**：
     *   請確認您已正確安裝 `uv`，並將其加入您的 `PATH` 環境變數。
-    *   在 macOS 上，請務必使用 `uv` 的完整路徑。
+    *   **macOS**: 如果您使用 `brew` 安裝 `uv`，通常不需要完整路徑。但如果 Claude 還是找不到 `uv` 指令，可以試試看：
+        1.  在終端機輸入 `which uv`，找到 `uv` 的完整路徑（例如：`/Users/.local/bin/uv`）。
+        2.  編輯 `claude_desktop_config.json` 檔案，將 `"command": "uv"` 改為 `"command": "/Users/.local/bin/uv"` (替換成您找到的完整路徑)。
 *   **無法啟動 MCP 伺服器**：
     *   請檢查 `claude_desktop_config.json` 檔案中的路徑是否正確。
     *   請確認您的 `mcp_data_analysis.py` 檔案沒有錯誤。
