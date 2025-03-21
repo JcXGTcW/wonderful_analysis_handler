@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger("data_analysis_mcp")
 
 # 創建 FastMCP 伺服器
-mcp = FastMCP("資料分析工具")
+mcp = FastMCP("Wonderful Analysis Handler")
 
 def load_csv_to_dataframe(
     csv_data: Optional[str] = None,
@@ -752,7 +752,7 @@ async def health_check() -> Dict[str, Any]:
 @mcp.tool()
 async def get_tool_help() -> Dict[str, Any]:
     """
-    獲取資料分析工具的使用說明
+    獲取W.A.H.的使用說明
     
     Returns:
         包含所有工具說明的字典

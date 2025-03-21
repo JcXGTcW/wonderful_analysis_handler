@@ -1,4 +1,4 @@
-# MCP 資料分析工具使用說明
+# W.A.H. (Wonderful Analysis Handler) 使用說明
 
 ## 工具功能
 
@@ -7,17 +7,17 @@
 ### 1. 資料分析
 
 *   **功能**: 支援過濾、分組、聚合等操作，可以對 **CSV 格式**的資料進行基本分析。
-    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用資料分析工具幫我分析 `example/path.csv` 的年齡分佈」就可以了！
+    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用W.A.H.幫我分析 `example/path.csv` 的年齡分佈」就可以了！
 
 ### 2. 資料視覺化
 
 *   **功能**: 支援多種圖表類型，例如折線圖、柱狀圖、散點圖、圓餅圖、箱線圖和熱圖，可以將資料視覺化呈現。
-    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用資料分析工具幫我將 **CSV 格式**的 `example/data.csv`，繪製成柱狀圖，顯示每月銷售額」就可以了！
+    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用W.A.H.幫我將 **CSV 格式**的 `example/data.csv`，繪製成柱狀圖，顯示每月銷售額」就可以了！
 
 ### 3. 進階統計分析
 
 *   **功能**: 支援相關性分析、時間序列分析、分佈分析和假設檢定等進階統計分析。
-    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用資料分析工具幫我分析 **CSV 格式**的 `example/data.csv` 的相關性」就可以了！
+    *   **如何請 LLM 使用**: 只要告訴 LLM 「使用W.A.H.幫我分析 **CSV 格式**的 `example/data.csv` 的相關性」就可以了！
 
 ## 在 Claude 中安裝 MCP 伺服器
 
@@ -35,13 +35,13 @@
 2.  執行以下指令：
 
     ```bash
-    git clone https://github.com/JcXGTcW/mcp_data_tools
-    cd mcp_data_tools
+    git clone https://github.com/JcXGTcW/wonderful_analysis_handler
+    cd wonderful_analysis_handler
     ```
 
-### 2. 只下載 [app/mcp_data_analysis.py](https://github.com/JcXGTcW/mcp_data_tools/blob/master/app/mcp_data_analysis.py) 檔案（推薦給一般使用者）
+### 2. 只下載 [app/wonderful_analysis_handler.py](https://github.com/JcXGTcW/wonderful_analysis_handler/blob/master/app/wonderful_analysis_handler.py) 檔案（推薦給一般使用者）
 
-如果您是一般使用者，只需要執行伺服器，且不關心程式碼更新，可以只下載 `mcp_data_analysis.py` 檔案。
+如果您是一般使用者，只需要執行伺服器，且不關心程式碼更新，可以只下載 `wonderful_analysis_handler.py` 檔案。
 這種方式更簡單快速。
 
 ## 前提條件
@@ -84,7 +84,7 @@
         ```json
         {
           "mcpServers": {
-            "資料分析工具": {
+            "W.A.H.": {
               "command": "uv",
               "args": [
                 "run",
@@ -100,7 +100,7 @@
                 "seaborn",
                 "--with",
                 "scipy",
-                "/Users/jcxgtcw/Documents/GitHub/mcp_data_tools/app/mcp_data_analysis.py"
+                "/Users/jcxgtcw/Documents/GitHub/wonderful_analysis_handler/app/wonderful_analysis_handler.py"
               ]
             }
           }
@@ -108,8 +108,7 @@
         ```
 
     *   **重要**：
-        *   將 `"資料分析工具"` 替換為您想要的伺服器名稱。
-        *   將 `"/Users/jcxgtcw/Documents/GitHub/mcp_data_tools/app/mcp_data_analysis.py"` 替換為您的 `mcp_data_analysis.py` 檔案的完整路徑。
+        *   將 `"/Users/jcxgtcw/Documents/GitHub/wonderful_analysis_handler/app/wonderful_analysis_handler.py"` 替換為您的 `wonderful_analysis_handler.py` 檔案的完整路徑。
 3.  儲存 `claude_desktop_config.json` 檔案。
 
 ## 執行 MCP 伺服器
@@ -127,8 +126,8 @@
         2.  編輯 `claude_desktop_config.json` 檔案，將 `"command": "uv"` 改為 `"command": "/Users/.local/bin/uv"` (替換成您找到的完整路徑)。
 *   **無法啟動 MCP 伺服器**：
     *   請檢查 `claude_desktop_config.json` 檔案中的路徑是否正確。
-    *   請確認您的 `mcp_data_analysis.py` 檔案沒有錯誤。
-    *   如果您只下載了 `mcp_data_analysis.py` 檔案，請確認您已在 `claude_desktop_config.json` 檔案中使用 `--with` 參數指定所有相依套件。
+    *   請確認您的 `wonderful_analysis_handler.py` 檔案沒有錯誤。
+    *   如果您只下載了 `wonderful_analysis_handler.py` 檔案，請確認您已在 `claude_desktop_config.json` 檔案中使用 `--with` 參數指定所有相依套件。
     *   請查看 Claude 桌面應用程式的日誌，以獲取更多錯誤訊息。
 
 如果您遇到任何問題，請參考 [MCP 文件](https://modelcontextprotocol.io/) 或聯絡技術支援。
