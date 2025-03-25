@@ -39,10 +39,13 @@
     cd wonderful_analysis_handler
     ```
 
-### 2. 只下載 [app/wonderful_analysis_handler.py](https://github.com/JcXGTcW/wonderful_analysis_handler/blob/master/app/wonderful_analysis_handler.py) 檔案（推薦給一般使用者）
+### 2. 只下載 wonderful_analysis_handler.py 檔案（推薦給一般使用者）
 
-如果您是一般使用者，只需要執行伺服器，且不關心程式碼更新，可以只下載 `wonderful_analysis_handler.py` 檔案。
+如果您是一般使用者，只需要執行伺服器，且不關心程式碼更新，可以只下載 [wonderful_analysis_handler.py](https://github.com/JcXGTcW/wonderful_analysis_handler/blob/master/app/wonderful_analysis_handler.py) 檔案。
 這種方式更簡單快速。
+
+
+![](download_py_instruction.png)
 
 ## 前提條件
 
