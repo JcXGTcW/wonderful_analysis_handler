@@ -76,10 +76,10 @@
 ## 設定 Claude 桌面應用程式
 
 1.  找到 Claude 桌面應用程式的設定檔 `claude_desktop_config.json`。
-    *   在 macOS 上，設定檔位於 `~/Library/Application Support/Claude/claude_desktop_config.json`。
-    *   在 Windows 上，設定檔位於 `%APPDATA%/Claude/claude_desktop_config.json`。
+    
+    ▸ **快速開啟方式**：選單列點選 `Claude(Mac) 或 File(Windows)` ➔ `Settings` ➔ `Developer` ➔ `Edit Config`
 2.  編輯 `claude_desktop_config.json` 檔案，加入您的 MCP 伺服器設定。
-    *   以下是一個範例設定：
+    *   以下是一個範例設定，請將範例中的路徑修改為您的檔案路徑：
 
         ```json
         {
@@ -108,7 +108,24 @@
         ```
 
     *   **重要**：
-        *   將 `"/Users/jcxgtcw/Documents/GitHub/wonderful_analysis_handler/app/wonderful_analysis_handler.py"` 替換為您的 `wonderful_analysis_handler.py` 檔案的完整路徑。
+        - **替換路徑指引**：
+             
+             請將範例路徑中的：
+             ```json
+             "/Users/jcxgtcw/Documents/GitHub/wonderful_analysis_handler/app/wonderful_analysis_handler.py"
+             ```
+             替換為您的實際路徑
+
+        - **取得檔案路徑的方法**：
+          **Mac**  
+          ▸ 在 Finder 中找到檔案  
+          ▸ 按住 <kbd>Option</kbd> 鍵 + 右鍵點擊  
+          ▸ 選擇「複製 "檔案名" 為路徑名稱」  
+          
+          **Windows**  
+          ▸ 在檔案總管選取檔案  
+          ▸ 右鍵點擊  
+          ▸ 選擇「複製為路徑」  
 3.  儲存 `claude_desktop_config.json` 檔案。
 
 ## 執行 MCP 伺服器
@@ -125,6 +142,7 @@
         1.  在終端機輸入 `which uv`，找到 `uv` 的完整路徑（例如：`/Users/.local/bin/uv`）。
         2.  編輯 `claude_desktop_config.json` 檔案，將 `"command": "uv"` 改為 `"command": "/Users/.local/bin/uv"` (替換成您找到的完整路徑)。
 *   **無法啟動 MCP 伺服器**：
+    *   **首次安裝問題**：首次使用W.A.H.時，可能會因為uv正在背景安裝套件，導致Claude認為MCP逾時。安裝完套件後重新啟動Claude即可使用。
     *   請檢查 `claude_desktop_config.json` 檔案中的路徑是否正確。
     *   請確認您的 `wonderful_analysis_handler.py` 檔案沒有錯誤。
     *   如果您只下載了 `wonderful_analysis_handler.py` 檔案，請確認您已在 `claude_desktop_config.json` 檔案中使用 `--with` 參數指定所有相依套件。
