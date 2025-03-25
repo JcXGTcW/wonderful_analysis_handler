@@ -49,7 +49,7 @@
 
 ## 前提條件
 
-*   已安裝 Claude 桌面應用程式
+*   已安裝 [Claude 桌面應用程式](https://claude.ai/download)
 *   已安裝 `uv`
 
 ## 安裝 `uv`
