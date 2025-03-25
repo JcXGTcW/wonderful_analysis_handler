@@ -137,7 +137,12 @@
 2.  在 Claude 中，您應該可以看到您設定的 MCP 伺服器（例如 "資料分析工具"）。
 3.  現在您可以開始使用您的 MCP 伺服器了！
 
+> ⚠️ 首次安裝如遇到 MCP 伺服器無法啟動問題，請查看[疑難排解 ➔ 首次安裝](#疑難排解)
+
 ## 疑難排解
+
+*   **首次安裝**：
+    *   首次使用W.A.H.時，可能會因為uv正在背景安裝套件，導致Claude認為MCP逾時。安裝完套件後重新啟動Claude即可使用。
 
 *   **找不到 `uv` 指令**：
     *   請確認您已正確安裝 `uv`，並將其加入您的 `PATH` 環境變數。
@@ -145,7 +150,6 @@
         1.  在終端機輸入 `which uv`，找到 `uv` 的完整路徑（例如：`/Users/.local/bin/uv`）。
         2.  編輯 `claude_desktop_config.json` 檔案，將 `"command": "uv"` 改為 `"command": "/Users/.local/bin/uv"` (替換成您找到的完整路徑)。
 *   **無法啟動 MCP 伺服器**：
-    *   **首次安裝問題**：首次使用W.A.H.時，可能會因為uv正在背景安裝套件，導致Claude認為MCP逾時。安裝完套件後重新啟動Claude即可使用。
     *   請檢查 `claude_desktop_config.json` 檔案中的路徑是否正確。
     *   請確認您的 `wonderful_analysis_handler.py` 檔案沒有錯誤。
     *   如果您只下載了 `wonderful_analysis_handler.py` 檔案，請確認您已在 `claude_desktop_config.json` 檔案中使用 `--with` 參數指定所有相依套件。
