@@ -103,6 +103,8 @@
                 "seaborn",
                 "--with",
                 "scipy",
+                "--with",
+                "requests",
                 "/Users/jcxgtcw/Documents/GitHub/wonderful_analysis_handler/app/wonderful_analysis_handler.py"
               ]
             }
