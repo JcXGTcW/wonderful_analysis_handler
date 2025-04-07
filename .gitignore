@@ -33,3 +33,5 @@ python-sdk/
 *.log
 *.tmp
 *.bak
+
+.DS_Store
