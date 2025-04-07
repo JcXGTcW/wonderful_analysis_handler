@@ -268,7 +268,10 @@ async def analyze_data(
     csv_path: Optional[str] = None,
     operations: List[Dict[str, Any]] = None,
     output_format: str = "json",
-    header: Optional[int] = 'infer'
+    header: Optional[int] = 'infer',
+    page: int = 1,
+    page_size: int = 100,
+    summary_only: bool = False
 ) -> Dict[str, Any]:
     """
     分析 CSV 資料，支援多種數據處理和分析操作
@@ -297,6 +300,16 @@ async def analyze_data(
             - 'infer': 自動推斷標題行 (預設)
             - None: 資料沒有標題行，將使用自動產生的列名 (0, 1, 2...)
             - int: 使用指定行作為標題行 (0為第一行)
+            
+        page (int):
+            分頁參數，指定要返回的頁碼，從1開始計算，預設為1
+            
+        page_size (int):
+            分頁大小，每頁返回的最大記錄數，預設為100
+            
+        summary_only (bool):
+            是否只返回摘要資訊而非完整資料，預設為False
+            當設為True時，僅返回統計資訊和前幾筆資料的範例
     
     Returns:
         Dict[str, Any]: 分析結果，包含以下可能的欄位:
@@ -333,6 +346,9 @@ async def analyze_data(
            參數:
            - transforms (Dict[str, str]): 轉換表達式字典，格式為 {列名: 表達式}
              範例: {"薪資_千元": "`薪資` / 1000", "年資": "`年齡` - `入職年齡`"}
+           - auto_convert (bool): 是否自動嘗試將字串類型的數值欄位轉換為數值，預設為 True。
+             當遇到如「unsupported operand type(s) for /: 'str' and 'str'」類型的錯誤時，
+             會自動嘗試識別並轉換表達式中用到的字串類型欄位為數值。
            
         6. time_series: 時間序列處理
            參數:
@@ -360,6 +376,34 @@ async def analyze_data(
         11. custom: 執行自定義查詢
             參數:
             - query (str): 自定義查詢，使用 pandas DataFrame 方法
+              現在也支援使用以下 pandas 模組函數:
+              * pd.to_numeric: 將欄位轉換為數值類型
+              * pd.to_datetime: 將欄位轉換為日期時間類型
+              * pd.to_timedelta: 將欄位轉換為時間間隔類型
+              * pd.cut/qcut: 將連續數據分箱
+              * pd.get_dummies: 創建虛擬變數/one-hot編碼
+              * pd.concat/merge: 資料合併操作
+              * 其他多個資料處理函數
+              範例:
+              - "df['銷售額'] = pd.to_numeric(df['銷售額'])"
+              - "pd.to_datetime(df['日期'])"
+        
+        12. advanced_group_by: 進階分組聚合與分析
+            參數:
+            - columns (List[str]): 分組欄位列表，必填
+            - aggregations (Dict[str, str]): 聚合函數字典，格式為 {列名: 聚合函數}
+              支援的聚合函數: "sum", "mean", "count", "min", "max", "median", "std", "var"
+              範例: {"銷售額": "sum", "數量": "mean"}
+            - having (str): 聚合後的過濾條件，類似SQL的HAVING子句
+              範例: "`銷售額_sum` > 1000"
+            - sort_by (Dict[str, str]): 排序設定，格式為 {欄位名: 順序}
+              順序可為 "asc" (升序) 或 "desc" (降序)
+              範例: {"銷售額_sum": "desc", "地區": "asc"}
+            - top_n (int): 返回前N筆結果
+              範例: 5 (返回前5筆結果)
+            - compare_with (Dict[str, float]): 與基準值比較，格式為 {欄位名: 基準值}
+              範例: {"平均用電量": 100.0}
+            - percentage (bool): 是否計算百分比差異，預設為False
     
     範例 1: 過濾和排序資料
     ```
@@ -446,9 +490,115 @@ async def analyze_data(
             elif op_type == "transform":
                 # 轉換列
                 transforms = params.get("transforms", {})
+                auto_convert = params.get("auto_convert", True)  # 預設啟用自動類型轉換
+                
                 for col, expr in transforms.items():
-                    df[col] = df.eval(expr)
+                    try:
+                        # 先嘗試直接執行表達式
+                        df[col] = df.eval(expr)
+                    except Exception as e:
+                        # 如果失敗且啟用了自動轉換，嘗試自動轉換資料類型後再計算
+                        if auto_convert and ("unsupported operand type" in str(e) or "could not convert string to float" in str(e)):
+                            logger.info(f"嘗試自動轉換資料類型並執行表達式: {expr}")
+                            
+                            # 1. 提取表達式中的欄位 (用反引號包圍的字串)
+                            import re
+                            column_names = re.findall(r'`([^`]+)`', expr)
+                            
+                            # 2. 對這些欄位嘗試轉換為數值
+                            for col_name in column_names:
+                                try:
+                                    if col_name in df.columns:
+                                        # 檢查欄位是否包含的是字串型數字
+                                        if pd.api.types.is_string_dtype(df[col_name]) and df[col_name].str.match(r'^-?\d*\.?\d+$').all():
+                                            logger.info(f"自動將欄位 '{col_name}' 從字串轉換為數值")
+                                            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
+                                except Exception as convert_error:
+                                    logger.warning(f"無法轉換欄位 '{col_name}': {str(convert_error)}")
+                            
+                            # 3. 再次嘗試執行表達式
+                            try:
+                                df[col] = df.eval(expr)
+                                logger.info(f"自動類型轉換後成功執行表達式: {expr}")
+                            except Exception as retry_error:
+                                # 如果仍然失敗，報告原始錯誤
+                                logger.error(f"轉換後表達式執行仍失敗: {str(retry_error)}")
+                                raise ValueError(f"表達式 '{expr}' 執行失敗: {str(e)}。自動類型轉換後仍然失敗。")
+                        else:
+                            # 未啟用自動轉換或者錯誤與類型無關，直接拋出原始錯誤
+                            raise ValueError(f"表達式 '{expr}' 執行失敗: {str(e)}")
+                            
                     logger.info(f"轉換列 {col}")
+            
+            elif op_type == "advanced_group_by":
+                # 進階分組聚合功能
+                group_cols = params.get("columns", [])
+                agg_dict = params.get("aggregations", {})
+                having = params.get("having", None)  # 類似SQL中的HAVING子句，用於過濾分組後的結果
+                sort_by = params.get("sort_by", {})  # 排序設定，格式為{欄位名: 順序}，例如{"平均銷售額": "desc"}
+                top_n = params.get("top_n", None)    # 返回前N個結果
+                compare_with = params.get("compare_with", {})  # 與基準值比較，格式為{欄位名: 基準值}
+                percentage = params.get("percentage", False)   # 是否計算百分比
+                
+                if not group_cols:
+                    raise ValueError("進階分組需要提供分組欄位")
+                
+                # 1. 基本分組聚合
+                if agg_dict:
+                    logger.info(f"執行進階分組聚合: 分組欄位={group_cols}, 聚合函數={agg_dict}")
+                    grouped = df.groupby(group_cols)
+                    df = grouped.agg(agg_dict).reset_index()
+                    logger.info(f"分組聚合後，形狀: {df.shape}")
+                
+                # 2. 應用Having過濾條件（類似SQL的HAVING）
+                if having:
+                    try:
+                        # 使用query過濾
+                        df = df.query(having)
+                        logger.info(f"應用Having過濾後，行數: {len(df)}")
+                    except Exception as e:
+                        logger.error(f"應用Having過濾時出錯: {str(e)}")
+                
+                # 3. 與基準值比較
+                if compare_with:
+                    for col, reference in compare_with.items():
+                        if col in df.columns:
+                            # 創建比較列
+                            try:
+                                ref_value = float(reference)
+                                df[f"{col}_差異"] = df[col] - ref_value
+                                
+                                if percentage:
+                                    # 添加百分比差異列
+                                    df[f"{col}_差異百分比"] = (df[col] - ref_value) / ref_value * 100
+                                    # 格式化為帶%的字串
+                                    df[f"{col}_差異百分比"] = df[f"{col}_差異百分比"].map('{:+.2f}%'.format)
+                                
+                                logger.info(f"添加了與基準值 {ref_value} 的比較列: {col}_差異")
+                            except Exception as e:
+                                logger.error(f"計算與基準值比較時出錯: {str(e)}")
+                
+                # 4. 排序
+                if sort_by:
+                    try:
+                        sort_cols = []
+                        sort_ascending = []
+                        
+                        for col, direction in sort_by.items():
+                            if col in df.columns:
+                                sort_cols.append(col)
+                                sort_ascending.append(direction.lower() != "desc")
+                        
+                        if sort_cols:
+                            df = df.sort_values(by=sort_cols, ascending=sort_ascending)
+                            logger.info(f"依照 {sort_cols} 排序完成")
+                    except Exception as e:
+                        logger.error(f"排序時出錯: {str(e)}")
+                
+                # 5. 擷取前N筆
+                if top_n and isinstance(top_n, int) and top_n > 0:
+                    df = df.head(top_n)
+                    logger.info(f"擷取前 {top_n} 筆資料")
             
             elif op_type == "time_series":
                 # 時間序列處理
@@ -539,53 +689,106 @@ async def analyze_data(
                             'cov', 'diff', 'pct_change', 'shift', 'isin', 'where', 'mask'
                         }
                         
-                        # 解析查詢，確保只使用允許的方法
-                        method_name = query.split('(')[0].strip()
-                        if method_name not in allowed_methods:
-                            raise ValueError(f"不允許使用方法: {method_name}")
-                        
-                        # 使用 getattr 執行查詢，而不是 eval
-                        method = getattr(df, method_name)
-                        # 移除方法名稱，只保留參數部分
-                        params_str = query[len(method_name):].strip()
-                        if params_str.startswith('(') and params_str.endswith(')'):
-                            params_str = params_str[1:-1]
-                        
-                        # 如果有參數，則執行帶參數的方法
-                        if params_str:
-                            # 使用 eval 來評估參數，但限制在安全的範圍內
-                            # 這仍然有風險，但比直接 eval 整個查詢要安全得多
-                            params_dict = {}
-                            exec(f"params_dict = dict({params_str})", {"__builtins__": {}}, params_dict)
-                            result = method(**params_dict)
+                        # 擴展功能：允許基本資料類型轉換和處理
+                        # 檢查是否使用了pandas模組功能 (例如 pd.to_numeric(df['列名']))
+                        if query.startswith('pd.') or 'pd.' in query:
+                            # 允許的 pandas 函數白名單
+                            allowed_pd_functions = {
+                                'to_numeric', 'to_datetime', 'to_timedelta', 
+                                'isna', 'notna', 'isnull', 'notnull',
+                                'cut', 'qcut', 'get_dummies', 'factorize',
+                                'concat', 'merge', 'wide_to_long'
+                            }
+                            
+                            # 檢查是否調用了允許的 pandas 函數
+                            func_name = query.split('pd.')[1].split('(')[0].strip()
+                            if func_name in allowed_pd_functions:
+                                # 安全執行 pandas 函數
+                                # 首先創建一個安全的局部作用域，只包含允許的對象
+                                safe_locals = {'df': df, 'pd': pd}
+                                try:
+                                    # 使用 exec 執行代碼，並捕獲結果
+                                    exec_code = f"result = {query}"
+                                    exec(exec_code, {"__builtins__": {}}, safe_locals)
+                                    result = safe_locals.get('result')
+                                    
+                                    # 檢查結果類型，並相應地處理
+                                    if isinstance(result, pd.DataFrame):
+                                        df = result
+                                        logger.info(f"執行 pandas 函數查詢後，形狀: {df.shape}")
+                                    elif isinstance(result, pd.Series):
+                                        # 如果是單列操作，且結果是Series，更新對應的列
+                                        # 提取可能的列名賦值模式：df['列名'] = pd.to_numeric(...)
+                                        if '=' in query and query.split('=')[0].strip().startswith("df["):
+                                            col_assign = query.split('=')[0].strip()
+                                            col_name = col_assign[3:-1].strip().strip("'\"")
+                                            if col_name in df.columns:
+                                                df[col_name] = result
+                                                logger.info(f"更新列 '{col_name}' 的資料類型")
+                                            else:
+                                                logger.warning(f"列 '{col_name}' 不存在，無法更新")
+                                        else:
+                                            # 其他情況將 Series 轉換為 DataFrame
+                                            df = result.to_frame()
+                                            logger.info(f"函數返回 Series，已轉換為 DataFrame，形狀: {df.shape}")
+                                    else:
+                                        # 其他結果類型
+                                        logger.info(f"pandas 函數執行結果類型: {type(result).__name__}")
+                                        return {"result": str(result)}
+                                except Exception as e:
+                                    logger.error(f"執行 pandas 函數錯誤: {str(e)}")
+                                    return {"error": f"執行 pandas 函數錯誤: {str(e)}"}
+                            else:
+                                raise ValueError(f"不允許使用 pandas 函數: pd.{func_name}")
                         else:
-                            result = method()
+                            # 原始的 DataFrame 方法處理
+                            # 解析查詢，確保只使用允許的方法
+                            method_name = query.split('(')[0].strip()
+                            if method_name not in allowed_methods:
+                                raise ValueError(f"不允許使用方法: {method_name}")
+                            
+                            # 使用 getattr 執行查詢，而不是 eval
+                            method = getattr(df, method_name)
+                            # 移除方法名稱，只保留參數部分
+                            params_str = query[len(method_name):].strip()
+                            if params_str.startswith('(') and params_str.endswith(')'):
+                                params_str = params_str[1:-1]
+                            
+                            # 如果有參數，則執行帶參數的方法
+                            if params_str:
+                                # 使用 eval 來評估參數，但限制在安全的範圍內
+                                # 這仍然有風險，但比直接 eval 整個查詢要安全得多
+                                params_dict = {}
+                                exec(f"params_dict = dict({params_str})", {"__builtins__": {}}, params_dict)
+                                result = method(**params_dict)
+                            else:
+                                result = method()
                         
-                        # 檢查結果類型，並相應地處理
-                        if isinstance(result, pd.DataFrame):
-                            # 對於 DataFrame 結果，更新 df 以便後續處理
-                            df = result
-                            logger.info(f"執行自定義查詢後，形狀: {df.shape}")
-                        elif isinstance(result, pd.Series):
-                            # 如果結果是 Series，轉換為 DataFrame
-                            result_df = result.to_frame()
-                            if output_format == "json":
-                                custom_result = {
-                                    "data": result_df.to_dict(orient="records"),
-                                    "rows": len(result_df),
-                                    "columns": list(result_df.columns)
-                                }
-                                logger.info(f"返回自定義查詢結果 (Series)，行數: {len(result_df)}")
-                                # 使用 json.dumps 並設定 ensure_ascii=False
-                                return json.loads(json.dumps(custom_result, ensure_ascii=False))
-                            elif output_format == "csv":
-                                csv_data = result_df.to_csv(index=False)
-                                logger.info(f"返回自定義查詢 CSV 結果 (Series)，大小: {len(csv_data)} 位元組")
-                                return {"csv_data": csv_data}
-                        else:
-                            # 如果結果是標量或其他類型，直接返回
-                            logger.info(f"執行自定義查詢，結果類型: {type(result).__name__}")
-                            return {"result": result}
+                            # 檢查結果類型，並相應地處理
+                            if isinstance(result, pd.DataFrame):
+                                # 對於 DataFrame 結果，更新 df 以便後續處理
+                                df = result
+                                logger.info(f"執行自定義查詢後，形狀: {df.shape}")
+                            elif isinstance(result, pd.Series):
+                                # 如果結果是 Series，轉換為 DataFrame
+                                result_df = result.to_frame()
+                                if output_format == "json":
+                                    custom_result = {
+                                        "data": result_df.to_dict(orient="records"),
+                                        "rows": len(result_df),
+                                        "columns": list(result_df.columns)
+                                    }
+                                    logger.info(f"返回自定義查詢結果 (Series)，行數: {len(result_df)}")
+                                    # 使用 json.dumps 並設定 ensure_ascii=False
+                                    return json.loads(json.dumps(custom_result, ensure_ascii=False))
+                                elif output_format == "csv":
+                                    csv_data = result_df.to_csv(index=False)
+                                    logger.info(f"返回自定義查詢 CSV 結果 (Series)，大小: {len(csv_data)} 位元組")
+                                    return {"csv_data": csv_data}
+                            else:
+                                # 如果結果是標量或其他類型，直接返回
+                                logger.info(f"執行自定義查詢，結果類型: {type(result).__name__}")
+                                return {"result": result}
                     except Exception as e:
                         logger.error(f"自定義查詢錯誤: {str(e)}")
                         return {"error": f"自定義查詢錯誤: {str(e)}"}
@@ -595,24 +798,93 @@ async def analyze_data(
             # 修改這裡：直接返回資料集的內容，而不是統計資訊
             # 處理日期時間列以進行 JSON 序列化
             df_copy = df.copy()
+            
+            # 處理日期時間列
             for col in df_copy.columns:
                 if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
                     df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d %H:%M:%S')
             
-            # 直接返回資料集的內容
+            # 計算總頁數
+            total_rows = len(df_copy)
+            total_pages = (total_rows + page_size - 1) // page_size if total_rows > 0 else 1
+            
+            # 檢查頁碼是否有效
+            if page < 1:
+                page = 1
+            elif page > total_pages:
+                page = total_pages
+            
+            # 計算分頁範圍
+            start_index = (page - 1) * page_size
+            end_index = min(start_index + page_size, total_rows)
+            
+            # 取得此頁資料
+            page_data = df_copy.iloc[start_index:end_index]
+            
+            # 建立結果字典
             result = {
-                "data": df_copy.to_dict(orient="records"),
-                "rows": len(df_copy),
+                "total_rows": total_rows,
+                "total_pages": total_pages,
+                "current_page": page,
+                "page_size": page_size,
                 "columns": list(df_copy.columns)
             }
-            logger.info(f"返回 JSON 結果，行數: {len(df)}")
+            
+            # 依據要求提供完整資料或摘要
+            if summary_only:
+                # 提供基本統計資訊和前幾筆資料的範例
+                numeric_cols = df_copy.select_dtypes(include=[np.number]).columns
+                if not numeric_cols.empty:
+                    # 計算數值欄位的基本統計資訊
+                    stats = df_copy[numeric_cols].describe().to_dict()
+                    result["statistics"] = stats
+                
+                # 提供前10筆或更少的資料作為範例
+                result["sample_data"] = df_copy.head(min(10, total_rows)).to_dict(orient="records")
+                result["message"] = f"提供摘要資訊，總共 {total_rows} 行資料。使用 summary_only=False 以獲取完整資料。"
+                logger.info(f"返回資料集摘要，總行數: {total_rows}")
+            else:
+                # 提供此頁的完整資料
+                result["data"] = page_data.to_dict(orient="records")
+                result["showing_rows"] = f"{start_index + 1}-{end_index} of {total_rows}"
+                logger.info(f"返回資料集第 {page}/{total_pages} 頁，顯示第 {start_index + 1}-{end_index} 行，總行數: {total_rows}")
+            
             # 使用 json.dumps 並設定 ensure_ascii=False
             return json.loads(json.dumps(result, ensure_ascii=False))
             
         elif output_format == "csv":
-            csv_data = df.to_csv(index=False)
-            logger.info(f"返回 CSV 結果，大小: {len(csv_data)} 位元組")
-            return {"csv_data": csv_data}
+            # 如果要求摘要，只返回前100行
+            if summary_only:
+                csv_data = df.head(100).to_csv(index=False)
+                logger.info(f"返回 CSV 摘要 (前100行)，大小: {len(csv_data)} 位元組，總行數: {len(df)}")
+                return {
+                    "csv_data": csv_data,
+                    "message": f"提供前100行作為摘要，總共 {len(df)} 行資料。使用 summary_only=False 以獲取完整資料。"
+                }
+            else:
+                # 分頁返回CSV
+                total_rows = len(df)
+                total_pages = (total_rows + page_size - 1) // page_size if total_rows > 0 else 1
+                
+                if page < 1:
+                    page = 1
+                elif page > total_pages:
+                    page = total_pages
+                
+                start_index = (page - 1) * page_size
+                end_index = min(start_index + page_size, total_rows)
+                
+                page_data = df.iloc[start_index:end_index]
+                csv_data = page_data.to_csv(index=False)
+                
+                logger.info(f"返回 CSV 結果 (第 {page}/{total_pages} 頁)，大小: {len(csv_data)} 位元組")
+                return {
+                    "csv_data": csv_data,
+                    "total_rows": total_rows,
+                    "total_pages": total_pages,
+                    "current_page": page,
+                    "showing_rows": f"{start_index + 1}-{end_index} of {total_rows}"
+                }
         else:
             return {"error": "不支援的輸出格式"}
     
@@ -1405,6 +1677,248 @@ async def install_chinese_font() -> Dict[str, Any]:
         logger.error(traceback.format_exc())
         return {"status": "錯誤", "message": str(e)}
 
+@mcp.tool()
+async def analyze_workflow(
+    csv_data: Optional[str] = None,
+    csv_path: Optional[str] = None,
+    workflow_name: str = None,
+    custom_workflow: Optional[List[Dict[str, Any]]] = None,
+    header: Optional[int] = 'infer',
+    output_format: str = "json"
+) -> Dict[str, Any]:
+    """
+    執行端到端資料分析流程，支援預定義分析模板和自訂分析流程
+    
+    Parameters:
+        csv_data (Optional[str]): 
+            CSV 格式的字串資料內容。與 csv_path 參數互斥，必須提供其中一個。
+            範例: "id,product,sales\n1,A,120\n2,B,150"
+        
+        csv_path (Optional[str]): 
+            CSV 檔案的路徑。與 csv_data 參數互斥，必須提供其中一個。
+            範例: "data/sales.csv"
+        
+        workflow_name (str): 
+            預定義的分析流程名稱，若指定此參數則忽略 custom_workflow。
+            目前支援以下流程:
+            - "sales_analysis": 銷售數據分析流程
+            - "time_series_analysis": 時間序列分析流程
+            - "correlation_analysis": 相關性分析流程
+            - "customer_segmentation": 客戶分群分析流程
+            - "data_quality_check": 資料品質檢查流程
+        
+        custom_workflow (Optional[List[Dict[str, Any]]]): 
+            自訂分析流程，格式與 analyze_data 操作相同，但執行順序固定。
+            若同時指定 workflow_name，則優先使用 workflow_name。
+        
+        header (Optional[int]): 
+            CSV 資料的標題行設定，與 analyze_data 參數相同。
+        
+        output_format (str): 
+            輸出格式，可選 "json" 或 "csv"，預設為 "json"。
+    
+    Returns:
+        Dict[str, Any]: 
+            分析結果，包含流程的所有步驟結果。
+    """
+    try:
+        logger.info(f"執行端到端分析流程，流程名稱: {workflow_name or '自訂流程'}")
+        
+        # 檢查必要參數
+        if not csv_data and not csv_path:
+            raise ValueError("必須提供 csv_data 或 csv_path")
+            
+        if not workflow_name and not custom_workflow:
+            raise ValueError("必須提供 workflow_name 或 custom_workflow")
+        
+        # 預定義的分析流程
+        predefined_workflows = {
+            # 銷售數據分析流程
+            "sales_analysis": [
+                # 1. 資料清理與準備
+                {"type": "custom", "params": {"query": "df['銷售額'] = pd.to_numeric(df['銷售額'], errors='coerce')"}},
+                {"type": "custom", "params": {"query": "dropna(subset=['銷售額'])"}},
+                
+                # 2. 按產品和地區分組分析
+                {"type": "advanced_group_by", "params": {
+                    "columns": ["產品", "地區"],
+                    "aggregations": {"銷售額": "sum", "數量": "sum"},
+                    "sort_by": {"銷售額_sum": "desc"}
+                }},
+                
+                # 3. 增加計算列 (單價、毛利等)
+                {"type": "transform", "params": {
+                    "transforms": {"平均單價": "`銷售額_sum` / `數量_sum`"}
+                }},
+                
+                # 4. 可視化結果 (通過另一個函數單獨調用)
+            ],
+            
+            # 時間序列分析流程
+            "time_series_analysis": [
+                # 1. 資料清理與準備
+                {"type": "custom", "params": {"query": "df['日期'] = pd.to_datetime(df['日期'], errors='coerce')"}},
+                {"type": "custom", "params": {"query": "dropna(subset=['日期'])"}},
+                
+                # 2. 按時間聚合
+                {"type": "time_series", "params": {"date_column": "日期", "frequency": "M"}},
+                
+                # 3. 排序並計算同比/環比變化
+                {"type": "sort", "params": {"columns": ["日期"]}},
+                {"type": "transform", "params": {
+                    "transforms": {"環比變化": "(`銷售額` - `銷售額`.shift(1)) / `銷售額`.shift(1) * 100"}
+                }}
+            ],
+            
+            # 相關性分析流程
+            "correlation_analysis": [
+                # 1. 資料類型轉換
+                {"type": "custom", "params": {"query": "df.select_dtypes(include=['object']).columns.tolist()"}},
+                # 上面的查詢會返回所有字串類型的列，之後我們需要將數值型字串轉換為數值
+                {"type": "custom", "params": {
+                    "query": "df['收入'] = pd.to_numeric(df['收入'], errors='coerce')"
+                }},
+                {"type": "custom", "params": {
+                    "query": "df['年齡'] = pd.to_numeric(df['年齡'], errors='coerce')"
+                }},
+                
+                # 2. 去除缺失值
+                {"type": "custom", "params": {"query": "dropna()"}},
+                
+                # 3. 計算相關性矩陣
+                {"type": "custom", "params": {"query": "corr()"}}
+            ],
+            
+            # 客戶分群分析流程
+            "customer_segmentation": [
+                # 1. 資料準備和清理
+                {"type": "custom", "params": {"query": "df['購買頻率'] = pd.to_numeric(df['購買頻率'], errors='coerce')"}},
+                {"type": "custom", "params": {"query": "df['平均消費額'] = pd.to_numeric(df['平均消費額'], errors='coerce')"}},
+                {"type": "custom", "params": {"query": "df['客戶忠誠度'] = pd.to_numeric(df['客戶忠誠度'], errors='coerce')"}},
+                {"type": "custom", "params": {"query": "dropna(subset=['購買頻率', '平均消費額', '客戶忠誠度'])"}},
+                
+                # 2. 分組分析
+                {"type": "advanced_group_by", "params": {
+                    "columns": ["客戶等級"],
+                    "aggregations": {
+                        "購買頻率": "mean", 
+                        "平均消費額": "mean", 
+                        "客戶忠誠度": "mean"
+                    },
+                    "sort_by": {"平均消費額_mean": "desc"}
+                }}
+            ],
+            
+            # 資料品質檢查流程
+            "data_quality_check": [
+                # 1. 統計基本資訊
+                {"type": "custom", "params": {"query": "info()"}},
+                {"type": "custom", "params": {"query": "describe()"}},
+                
+                # 2. 檢查缺失值
+                {"type": "custom", "params": {"query": "isnull().sum()"}},
+                
+                # 3. 檢查重複值
+                {"type": "custom", "params": {"query": "duplicated().sum()"}},
+                
+                # 4. 檢查異常值 (使用簡單的統計方法)
+                {"type": "custom", "params": {
+                    "query": "df.select_dtypes(include=[np.number]).apply(lambda x: ((x - x.mean()).abs() > 3*x.std()).sum())"
+                }}
+            ]
+        }
+        
+        # 確定要執行的流程
+        workflow = []
+        if workflow_name:
+            if workflow_name in predefined_workflows:
+                workflow = predefined_workflows[workflow_name]
+            else:
+                return {"error": f"找不到預定義流程: {workflow_name}。可用的流程有: {list(predefined_workflows.keys())}"}
+        else:
+            workflow = custom_workflow
+        
+        # 載入資料
+        df = load_csv_to_dataframe(csv_data, csv_path, header=header)
+        logger.info(f"成功載入資料，形狀: {df.shape}")
+        
+        # 執行流程中的每個步驟
+        results = []
+        for i, step in enumerate(workflow):
+            try:
+                logger.info(f"執行流程步驟 {i+1}/{len(workflow)}: {step['type']}")
+                
+                # 直接使用 analyze_data 函數處理每個步驟
+                step_result = await analyze_data(
+                    csv_data=df.to_csv(index=False), 
+                    operations=[step],
+                    output_format=output_format,
+                    header=0  # 因為我們已經從 DataFrame 生成 CSV，所以標題在第一行
+                )
+                
+                # 更新 DataFrame 以便下一步使用
+                if output_format == "json" and "data" in step_result:
+                    # 從返回的 JSON 資料更新 DataFrame
+                    new_df = pd.DataFrame(step_result["data"])
+                    if not new_df.empty:
+                        df = new_df
+                
+                # 添加步驟結果
+                results.append({
+                    "step": i+1,
+                    "operation": step,
+                    "result": step_result
+                })
+                
+                logger.info(f"流程步驟 {i+1} 完成，DataFrame 形狀: {df.shape}")
+                
+            except Exception as e:
+                logger.error(f"流程步驟 {i+1} 執行失敗: {str(e)}")
+                results.append({
+                    "step": i+1,
+                    "operation": step,
+                    "error": str(e)
+                })
+                # 如果這是一個關鍵步驟，我們可以選擇中斷流程
+                # 這裡選擇繼續執行，以便看到更多可能的錯誤
+        
+        # 返回最終結果
+        final_result = {
+            "workflow_name": workflow_name or "custom_workflow",
+            "total_steps": len(workflow),
+            "executed_steps": len(results),
+            "final_data_shape": {"rows": len(df), "columns": len(df.columns)},
+            "steps_results": results
+        }
+        
+        # 返回最終資料集
+        if output_format == "json":
+            # 處理日期時間列以進行 JSON 序列化
+            df_copy = df.copy()
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                    df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 限制返回大小，最多返回前100行
+            final_result["data"] = df_copy.head(100).to_dict(orient="records")
+            if len(df) > 100:
+                final_result["data_note"] = f"由於大小限制，僅顯示前100行，總行數: {len(df)}"
+            
+        elif output_format == "csv":
+            # 限制返回大小，最多返回前500行
+            csv_data = df.head(500).to_csv(index=False)
+            final_result["csv_data"] = csv_data
+            if len(df) > 500:
+                final_result["data_note"] = f"由於大小限制，僅包含前500行，總行數: {len(df)}"
+        
+        logger.info(f"端到端分析流程執行完成，總步驟: {len(workflow)}，最終資料形狀: {df.shape}")
+        return json.loads(json.dumps(final_result, ensure_ascii=False))
+        
+    except Exception as e:
+        logger.error(f"端到端分析流程執行失敗: {str(e)}")
+        logger.error(traceback.format_exc())
+        return {"error": f"端到端分析流程執行失敗: {str(e)}"}
 
+# 主程式入口
 if __name__ == "__main__":
     mcp.run() 
