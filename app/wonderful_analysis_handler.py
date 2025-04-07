@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import seaborn as sns
+from scipy import stats
 
 from mcp.server.fastmcp import FastMCP, Image
 
@@ -1530,7 +1531,6 @@ async def advanced_statistics(
                     
                     if col1 and col2 and col1 in df.columns and col2 in df.columns:
                         try:
-                            from scipy import stats
                             t_stat, p_value = stats.ttest_ind(
                                 df[col1].dropna(), 
                                 df[col2].dropna(),
@@ -1552,7 +1552,6 @@ async def advanced_statistics(
                     
                     if col and col in df.columns:
                         try:
-                            from scipy import stats
                             stat, p_value = stats.shapiro(df[col].dropna())
                             hypothesis_tests["normality_test"] = {
                                 "statistic": float(stat),
