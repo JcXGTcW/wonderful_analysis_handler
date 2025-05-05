@@ -6,7 +6,7 @@ import platform
 import requests
 import traceback
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -236,9 +236,9 @@ init_font_support()
 mcp = FastMCP("Wonderful Analysis Handler")
 
 def load_csv_to_dataframe(
-    csv_data: Optional[str] = None,
-    csv_path: Optional[str] = None,
-    header: Optional[int] = 'infer'
+    csv_data: str = None,
+    csv_path: str = None,
+    header: int = 'infer'
 ) -> pd.DataFrame:
     """
     從 CSV 字串或路徑載入資料為 DataFrame。
@@ -265,11 +265,11 @@ def load_csv_to_dataframe(
 
 @mcp.tool()
 async def analyze_data(
-    csv_data: Optional[str] = None,
-    csv_path: Optional[str] = None,
+    csv_data: str = None,
+    csv_path: str = None,
     operations: List[Dict[str, Any]] = None,
     output_format: str = "json",
-    header: Optional[int] = 'infer',
+    header: int = 'infer',
     page: int = 1,
     page_size: int = 100,
     summary_only: bool = False
@@ -897,11 +897,11 @@ async def analyze_data(
 @mcp.tool()
 async def visualize_data(data: List[Dict[str, Any]], 
                     chart_type: str, 
-                    x_column: Optional[str] = None, 
-                    y_column: Optional[str] = None, 
-                    title: Optional[str] = None, 
-                    color_column: Optional[str] = None,
-                    options: Optional[Dict[str, Any]] = None) -> Image:
+                    x_column: str = None, 
+                    y_column: str = None, 
+                    title: str = None, 
+                    color_column: str = None,
+                    options: Dict[str, Any] = None) -> Image:
     """
     生成資料視覺化圖表，支援多種圖表類型與中文顯示
     
@@ -1333,7 +1333,7 @@ def _create_error_image(error_message, fontprops=None):
 async def advanced_statistics(
     csv_data: str,
     operations: List[Dict[str, Any]] = None,
-    header: Optional[int] = 'infer'
+    header: int = 'infer'
 ) -> Dict[str, Any]:
     """
     執行進階統計分析，提供相關性、時間序列、分佈和假設檢定等功能
@@ -1678,11 +1678,11 @@ async def install_chinese_font() -> Dict[str, Any]:
 
 @mcp.tool()
 async def analyze_workflow(
-    csv_data: Optional[str] = None,
-    csv_path: Optional[str] = None,
+    csv_data: str = None,
+    csv_path: str = None,
     workflow_name: str = None,
-    custom_workflow: Optional[List[Dict[str, Any]]] = None,
-    header: Optional[int] = 'infer',
+    custom_workflow: List[Dict[str, Any]] = None,
+    header: int = 'infer',
     output_format: str = "json"
 ) -> Dict[str, Any]:
     """
